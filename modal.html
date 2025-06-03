@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Настройка колонок и токена</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        margin: 0;
+      }
+      .modal-container {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 600px;
+      }
+      h2 {
+        font-size: 18px;
+        color: #333;
+        margin-bottom: 16px;
+      }
+      #error-message,
+      #success-message {
+        display: none;
+        margin-bottom: 16px;
+        font-size: 14px;
+        padding: 10px;
+        border-radius: 4px;
+      }
+      #error-message {
+        color: #d32f2f;
+        background-color: #ffebee;
+      }
+      #success-message {
+        color: #2e7d32;
+        background-color: #e8f5e9;
+      }
+      .field-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .field-row label {
+        width: 160px;
+        font-size: 14px;
+      }
+      .field-row select,
+      .field-row input {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .remove-btn {
+        background: none;
+        border: none;
+        color: #d32f2f;
+        font-size: 18px;
+        cursor: pointer;
+        margin-left: 8px;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .section {
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+      }
+      .section-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .add-btn {
+        background-color: #1976d2;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      button#submitButton {
+        width: 100%;
+        padding: 10px;
+        background-color: #1976d2;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        margin-top: 20px;
+      }
+      button:hover:not(:disabled) {
+        background-color: #1565c0;
+      }
+      button:disabled {
+        background-color: #90caf9;
+        cursor: not-allowed;
+      }
+      .spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid #fff;
+        border-top: 2px solid transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .fields-section {
+        display: none;
+      }
+      .fields-section.visible {
+        display: block;
+      }
+      .column-select option {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="modal-container">
+      <h2>Настройка колонок и токена</h2>
+      <div id="error-message"></div>
+      <div id="success-message"></div>
+
+      <div class="section">
+        <div class="field-row">
+          <label for="tokenInput">WB API Токен:</label>
+          <input type="text" id="tokenInput" placeholder="Введите токен" />
+        </div>
+        <div class="field-row">
+          <label for="headerRowInput">Строка заголовков:</label>
+          <input
+            type="number"
+            id="headerRowInput"
+            min="0"
+            placeholder="Введите номер строки (например, 3)"
+          />
+        </div>
+      </div>
+
+      <div id="requiredFieldsSection" class="section fields-section">
+        <div class="section-title">
+          <h3>Обязательные поля</h3>
+        </div>
+        <div id="requiredFields"></div>
+      </div>
+
+      <div id="additionalFieldsSection" class="section fields-section">
+        <div class="section-title">
+          <h3>Дополнительные поля</h3>
+          <button type="button" class="add-btn" id="addFieldBtn">
+            + Добавить поле
+          </button>
+        </div>
+        <div id="customFieldsContainer"></div>
+      </div>
+
+      <button id="submitButton">
+        <span class="spinner" id="spinner"></span>
+        <span id="buttonText">Сохранить и выполнить</span>
+      </button>
+    </div>
+
+    <script>
+      const FIELD_CONFIG = {
+        required: [
+          { id: "article", label: "Артикул" },
+          { id: "finalPrice", label: "Конечная цена" },
+          { id: "priceWithSpp", label: "Цена с учетом СПП" },
+          { id: "priceInLk", label: "Цена в ЛК" },
+          { id: "sppPercent", label: "СПП (%)" },
+        ],
+        optional: [
+          { id: "priceDifference", label: "Разница цен" },
+          { id: "totalQuantity", label: "Общее количество" },
+          { id: "vendorCode", label: "Внутренняя номенклатура" },
+        ],
+      };
+
+      function createColumnSelect(fieldId, selected = "", columns = []) {
+        const select = document.createElement("select");
+        select.className = "column-select";
+        select.name = `column-${fieldId}`;
+        select.id = `column-${fieldId}`;
+
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "-- Выберите колонку --";
+        select.appendChild(emptyOption);
+
+        columns.forEach((col) => {
+          const option = document.createElement("option");
+          option.value = col.column;
+          option.textContent = col.header;
+          if (col.column === selected) option.selected = true;
+          select.appendChild(option);
+        });
+
+        return select;
+      }
+
+      function initRequiredFields(columns = [], savedConfig = null) {
+        const container = document.getElementById("requiredFields");
+        container.innerHTML = "";
+
+        if (columns.length === 0) {
+          showError("Пожалуйста, выделите хотя бы одну колонку в таблице.");
+          return;
+        }
+
+        FIELD_CONFIG.required.forEach((field) => {
+          const row = document.createElement("div");
+          row.className = "field-row";
+
+          const label = document.createElement("label");
+          label.textContent = field.label + ":";
+          label.setAttribute("for", `column-${field.id}`);
+
+          const select = createColumnSelect(
+            field.id,
+            savedConfig?.columns[field.id] || "",
+            columns
+          );
+
+          row.appendChild(label);
+          row.appendChild(select);
+          container.appendChild(row);
+        });
+      }
+
+      function addAdditionalField(columns = [], fieldId = "", column = "") {
+        const container = document.getElementById("customFieldsContainer");
+
+        const row = document.createElement("div");
+        row.className = "field-row";
+
+        const fieldSelect = document.createElement("select");
+        fieldSelect.className = "field-select";
+        fieldSelect.name = "optional-field";
+
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "Выберите поле";
+        fieldSelect.appendChild(emptyOption);
+
+        FIELD_CONFIG.optional.forEach((field) => {
+          const option = document.createElement("option");
+          option.value = field.id;
+          option.textContent = field.label;
+          if (field.id === fieldId) option.selected = true;
+          fieldSelect.appendChild(option);
+        });
+
+        const columnSelect = createColumnSelect(
+          `optional-${fieldId || "new"}`,
+          column,
+          columns
+        );
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "remove-btn";
+        removeBtn.textContent = "×";
+        removeBtn.onclick = () => row.remove();
+
+        row.appendChild(fieldSelect);
+        row.appendChild(columnSelect);
+        row.appendChild(removeBtn);
+        container.appendChild(row);
+      }
+
+      function gatherFormData() {
+        const headerRowInput = document.getElementById("headerRowInput").value;
+        const data = {
+          token: document.getElementById("tokenInput").value.trim(),
+          headerRow: headerRowInput ? parseInt(headerRowInput) : null,
+          mode: window.parseMode || "parseArticles",
+          columns: {},
+        };
+
+        FIELD_CONFIG.required.forEach((field) => {
+          const select = document.getElementById(`column-${field.id}`);
+          if (select && select.value) {
+            data.columns[field.id] = select.value;
+          }
+        });
+
+        document
+          .querySelectorAll("#customFieldsContainer .field-row")
+          .forEach((row) => {
+            const fieldSelect = row.querySelector(".field-select");
+            const columnSelect = row.querySelector(".column-select");
+
+            if (fieldSelect.value && columnSelect.value) {
+              data.columns[fieldSelect.value] = columnSelect.value;
+            }
+          });
+
+        return data;
+      }
+
+      function showError(message) {
+        const el = document.getElementById("error-message");
+        el.textContent = message;
+        el.style.display = "block";
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function showSuccess(message) {
+        const el = document.getElementById("success-message");
+        el.textContent = message;
+        el.style.display = "block";
+      }
+
+      function hideMessages() {
+        document.getElementById("error-message").style.display = "none";
+        document.getElementById("success-message").style.display = "none";
+      }
+
+      function toggleFieldsSections(show) {
+        const requiredSection = document.getElementById(
+          "requiredFieldsSection"
+        );
+        const additionalSection = document.getElementById(
+          "additionalFieldsSection"
+        );
+        if (show) {
+          requiredSection.classList.add("visible");
+          additionalSection.classList.add("visible");
+        } else {
+          requiredSection.classList.remove("visible");
+          additionalSection.classList.remove("visible");
+          document.getElementById("requiredFields").innerHTML = "";
+          document.getElementById("customFieldsContainer").innerHTML = "";
+        }
+      }
+
+      function submitForm() {
+        hideMessages();
+        const formData = gatherFormData();
+
+        if (!formData.token) {
+          showError("Токен обязателен для заполнения");
+          return;
+        }
+
+        if (!formData.headerRow || formData.headerRow < 1) {
+          showError(
+            "Укажите корректный номер строки заголовков (число больше 0)"
+          );
+          return;
+        }
+
+        let hasErrors = false;
+        FIELD_CONFIG.required.forEach((field) => {
+          if (!formData.columns[field.id]) {
+            showError(`Необходимо выбрать колонку для поля: ${field.label}`);
+            hasErrors = true;
+          }
+        });
+
+        if (hasErrors) return;
+
+        const button = document.getElementById("submitButton");
+        const buttonText = document.getElementById("buttonText");
+        const spinner = document.getElementById("spinner");
+
+        button.disabled = true;
+        buttonText.textContent = "Обработка...";
+        spinner.style.display = "inline-block";
+
+        google.script.run
+          .withSuccessHandler((result) => {
+            button.disabled = false;
+            buttonText.textContent = "Сохранить и выполнить";
+            spinner.style.display = "none";
+
+            if (result.success) {
+              showSuccess(result.message);
+              setTimeout(() => google.script.host.close(), 1500);
+            } else {
+              showError(result.message);
+            }
+          })
+          .withFailureHandler((error) => {
+            button.disabled = false;
+            buttonText.textContent = "Сохранить и выполнить";
+            spinner.style.display = "none";
+            showError(`Ошибка: ${error.message}`);
+          })
+          .processConfig(formData);
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const headerRowInput = document.getElementById("headerRowInput");
+
+        toggleFieldsSections(false);
+
+        headerRowInput.addEventListener("input", () => {
+          const headerRow = parseInt(headerRowInput.value);
+          if (headerRow > 0) {
+            google.script.run
+              .withSuccessHandler((columns) => {
+                toggleFieldsSections(true);
+                initRequiredFields(columns);
+                document.getElementById("customFieldsContainer").innerHTML = "";
+                document.getElementById("addFieldBtn").onclick = () =>
+                  addAdditionalField(columns);
+              })
+              .withFailureHandler((error) => {
+                console.error("Ошибка получения колонок:", error);
+                showError(
+                  "Не удалось получить заголовки. Проверьте выделение и номер строки."
+                );
+                toggleFieldsSections(false);
+              })
+              .getSelectedColumns(headerRow);
+          } else {
+            toggleFieldsSections(false);
+          }
+        });
+
+        google.script.run
+          .withSuccessHandler((config) => {
+            if (config) {
+              document.getElementById("tokenInput").value = config.token || "";
+              headerRowInput.value = config.headerRow || "";
+
+              if (config.headerRow && config.headerRow > 0) {
+                google.script.run
+                  .withSuccessHandler((columns) => {
+                    toggleFieldsSections(true);
+                    initRequiredFields(columns, config);
+                    if (config.columns) {
+                      Object.entries(config.columns).forEach(
+                        ([field, column]) => {
+                          if (
+                            !FIELD_CONFIG.required.some((f) => f.id === field)
+                          ) {
+                            addAdditionalField(columns, field, column);
+                          }
+                        }
+                      );
+                    }
+                    document.getElementById("addFieldBtn").onclick = () =>
+                      addAdditionalField(columns);
+                  })
+                  .withFailureHandler((error) => {
+                    console.error("Ошибка получения колонок:", error);
+                    showError(
+                      "Не удалось загрузить заголовки для сохраненной конфигурации."
+                    );
+                    toggleFieldsSections(false);
+                  })
+                  .getSelectedColumns(config.headerRow);
+              }
+            }
+          })
+          .withFailureHandler((error) => {
+            console.error("Ошибка загрузки конфигурации:", error);
+          })
+          .getSavedConfig();
+
+        document
+          .getElementById("submitButton")
+          .addEventListener("click", submitForm);
+      });
+    </script>
+  </body>
+</html>
