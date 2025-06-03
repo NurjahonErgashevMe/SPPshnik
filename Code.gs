@@ -1,8 +1,11 @@
+/**
+ * Создает пользовательское меню
+ */
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu("WB Артикулы")
-    .addItem("Парсить по артикулам", "showConfigModalForArticles")
-    .addItem("Спарсить все в ЛК", "showConfigModalForLk")
+    .createMenu('WB Артикулы')
+    .addItem('Парсить по артикулам', 'showConfigModalForArticles')
+    .addItem('Спарсить все в ЛК', 'showConfigModalForLk')
     .addToUi();
 }
 
@@ -10,25 +13,22 @@ function onOpen() {
  * Показывает модалку для парсинга по артикулам
  */
 function showConfigModalForArticles() {
-  const html = HtmlService.createHtmlOutputFromFile("modal")
+  const html = HtmlService.createHtmlOutputFromFile('modal')
     .setWidth(600)
     .setHeight(600);
   html.append('<script>window.parseMode = "parseArticles";</script>');
-  SpreadsheetApp.getUi().showModalDialog(
-    html,
-    "Настройка: Парсить по артикулам"
-  );
+  SpreadsheetApp.getUi().showModalDialog(html, 'Настройка: Парсить по артикулам');
 }
 
 /**
  * Показывает модалку для парсинга всех товаров из ЛК
  */
 function showConfigModalForLk() {
-  const html = HtmlService.createHtmlOutputFromFile("modal")
+  const html = HtmlService.createHtmlOutputFromFile('modal')
     .setWidth(600)
     .setHeight(600);
   html.append('<script>window.parseMode = "parseAllLk";</script>');
-  SpreadsheetApp.getUi().showModalDialog(html, "Настройка: Спарсить все в ЛК");
+  SpreadsheetApp.getUi().showModalDialog(html, 'Настройка: Спарсить все в ЛК');
 }
 
 /**
@@ -38,14 +38,14 @@ function showConfigModalForLk() {
  */
 function processConfig(data) {
   try {
-    if (!data.token || data.token.trim() === "") {
-      return { success: false, message: "Токен не может быть пустым." };
+    if (!data.token || data.token.trim() === '') {
+      return { success: false, message: 'Токен не может быть пустым.' };
     }
     if (!data.headerRow || isNaN(data.headerRow) || data.headerRow < 1) {
-      return {
-        success: false,
-        message: "Укажите корректный номер строки заголовков (число больше 0).",
-      };
+      return { success: false, message: 'Укажите корректный номер строки заголовков (число больше 0).' };
+    }
+    if (!data.walletPercent || data.walletPercent < 0 || data.walletPercent > 100) {
+      return { success: false, message: 'Процент WB-кошелька должен быть числом от 0 до 100.' };
     }
 
     saveConfig(data);
@@ -55,10 +55,10 @@ function processConfig(data) {
     }
 
     let result;
-    if (data.mode === "parseAllLk") {
-      result = parseAllFromLk(data.columns, data.headerRow, data.token);
+    if (data.mode === 'parseAllLk') {
+      result = parseAllFromLk(data.columns, data.headerRow, data.token, data.walletPercent);
     } else {
-      result = parseArticles(data.columns, data.headerRow);
+      result = parseArticles(data.columns, data.headerRow, data.walletPercent);
     }
     return { success: true, message: result.message };
   } catch (error) {
@@ -71,10 +71,7 @@ function processConfig(data) {
  * @param {Object} config - Конфигурация
  */
 function saveConfig(config) {
-  PropertiesService.getScriptProperties().setProperty(
-    "WB_CONFIG",
-    JSON.stringify(config)
-  );
+  PropertiesService.getScriptProperties().setProperty('WB_CONFIG', JSON.stringify(config));
 }
 
 /**
@@ -82,7 +79,6 @@ function saveConfig(config) {
  * @return {Object|null} Конфигурация
  */
 function getSavedConfig() {
-  const configJson =
-    PropertiesService.getScriptProperties().getProperty("WB_CONFIG");
+  const configJson = PropertiesService.getScriptProperties().getProperty('WB_CONFIG');
   return configJson ? JSON.parse(configJson) : null;
 }

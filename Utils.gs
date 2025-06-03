@@ -4,14 +4,13 @@
  * @return {string} Буквенное обозначение (A, B, C, ...)
  */
 function columnToLetter(columnIndex) {
-  let temp,
-    letter = "";
+  let temp, letter = '';
   while (columnIndex > 0) {
     temp = (columnIndex - 1) % 26;
     letter = String.fromCharCode(temp + 65) + letter;
     columnIndex = (columnIndex - temp - 1) / 26;
   }
-  return letter || "A";
+  return letter || 'A';
 }
 
 /**
@@ -22,12 +21,12 @@ function columnToLetter(columnIndex) {
 function letterToColumn(letter) {
   let column = 0;
   const letters = letter.toUpperCase();
-
+  
   for (let i = 0; i < letters.length; i++) {
     const charCode = letters.charCodeAt(i) - 64;
     column = column * 26 + charCode;
   }
-
+  
   return column;
 }
 
@@ -42,7 +41,7 @@ function extractArticles(values) {
       const value = row[0];
       return extractArticle(value);
     })
-    .filter((article) => article !== null);
+    .filter(article => article !== null);
 }
 
 /**
@@ -51,11 +50,11 @@ function extractArticles(values) {
  * @return {number|null} Артикул или null
  */
 function extractArticle(value) {
-  if (typeof value === "string") {
-    const cleaned = value.replace(/\D/g, "");
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/\D/g, '');
     return cleaned ? parseInt(cleaned, 10) : null;
   }
-  return typeof value === "number" ? value : null;
+  return typeof value === 'number' ? value : null;
 }
 
 /**
@@ -78,5 +77,5 @@ function chunkArray(array, chunkSize) {
  * @return {string|number} Форматированное значение
  */
 function formatValue(value) {
-  return value === null || value === undefined || value === 0 ? "-" : value;
+  return (value === null || value === undefined || value === 0) ? '-' : value;
 }

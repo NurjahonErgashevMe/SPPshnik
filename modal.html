@@ -17,7 +17,7 @@
         background-color: #fff;
         padding: 20px;
         border-radius: 8px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 8px rgba(0, 0, 0.2);
         width: 100%;
         max-width: 600px;
       }
@@ -159,6 +159,17 @@
           <input type="text" id="tokenInput" placeholder="Введите токен" />
         </div>
         <div class="field-row">
+          <label for="walletPercentInput">Процент WB-кошелька (%):</label>
+          <input
+            type="number"
+            id="walletPercentInput"
+            min="0"
+            max="100"
+            step="0.1"
+            placeholder="Например, 3"
+          />
+        </div>
+        <div class="field-row">
           <label for="headerRowInput">Строка заголовков:</label>
           <input
             type="number"
@@ -215,7 +226,6 @@
         select.id = `column-${fieldId}`;
 
         const emptyOption = document.createElement("option");
-        emptyOption.value = "";
         emptyOption.textContent = "-- Выберите колонку --";
         select.appendChild(emptyOption);
 
@@ -230,11 +240,11 @@
         return select;
       }
 
-      function initRequiredFields(columns = [], savedConfig = null) {
+      function initRequiredFields(fields) {
         const container = document.getElementById("requiredFields");
         container.innerHTML = "";
 
-        if (columns.length === 0) {
+        if (fields.columns.length === 0) {
           showError("Пожалуйста, выделите хотя бы одну колонку в таблице.");
           return;
         }
@@ -249,8 +259,8 @@
 
           const select = createColumnSelect(
             field.id,
-            savedConfig?.columns[field.id] || "",
-            columns
+            fields.savedConfig?.columns[field.id] || "",
+            fields.columns
           );
 
           row.appendChild(label);
@@ -259,7 +269,7 @@
         });
       }
 
-      function addAdditionalField(columns = [], fieldId = "", column = "") {
+      function addAdditionalField(columns = [], fieldId = "", field = "") {
         const container = document.getElementById("customFieldsContainer");
 
         const row = document.createElement("div");
@@ -270,7 +280,6 @@
         fieldSelect.name = "optional-field";
 
         const emptyOption = document.createElement("option");
-        emptyOption.value = "";
         emptyOption.textContent = "Выберите поле";
         fieldSelect.appendChild(emptyOption);
 
@@ -284,7 +293,7 @@
 
         const columnSelect = createColumnSelect(
           `optional-${fieldId || "new"}`,
-          column,
+          field,
           columns
         );
 
@@ -302,8 +311,13 @@
 
       function gatherFormData() {
         const headerRowInput = document.getElementById("headerRowInput").value;
+        const walletPercentInput =
+          document.getElementById("walletPercentInput").value;
         const data = {
           token: document.getElementById("tokenInput").value.trim(),
+          walletPercent: walletPercentInput
+            ? parseFloat(walletPercentInput)
+            : null,
           headerRow: headerRowInput ? parseInt(headerRowInput) : null,
           mode: window.parseMode || "parseArticles",
           columns: {},
@@ -334,7 +348,7 @@
         const el = document.getElementById("error-message");
         el.textContent = message;
         el.style.display = "block";
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        el.scrollIntoView({ behavior: "smooth", block: "auto" });
       }
 
       function showSuccess(message) {
@@ -379,6 +393,15 @@
           showError(
             "Укажите корректный номер строки заголовков (число больше 0)"
           );
+          return;
+        }
+
+        if (
+          !formData.walletPercent ||
+          formData.walletPercent < 0 ||
+          formData.walletPercent > 100
+        ) {
+          showError("Процент WB-кошелька должен быть числом от 0 до 100");
           return;
         }
 
@@ -433,10 +456,11 @@
             google.script.run
               .withSuccessHandler((columns) => {
                 toggleFieldsSections(true);
-                initRequiredFields(columns);
+                initRequiredFields({ columns: columns, savedConfig: null });
                 document.getElementById("customFieldsContainer").innerHTML = "";
-                document.getElementById("addFieldBtn").onclick = () =>
-                  addAdditionalField(columns);
+                document
+                  .getElementById("addFieldBtn")
+                  .addEventListener("click", () => addAdditionalField(columns));
               })
               .withFailureHandler((error) => {
                 console.error("Ошибка получения колонок:", error);
@@ -455,13 +479,18 @@
           .withSuccessHandler((config) => {
             if (config) {
               document.getElementById("tokenInput").value = config.token || "";
+              document.getElementById("walletPercentInput").value =
+                config.walletPercent || "";
               headerRowInput.value = config.headerRow || "";
 
               if (config.headerRow && config.headerRow > 0) {
                 google.script.run
                   .withSuccessHandler((columns) => {
                     toggleFieldsSections(true);
-                    initRequiredFields(columns, config);
+                    initRequiredFields({
+                      columns: columns,
+                      savedConfig: config,
+                    });
                     if (config.columns) {
                       Object.entries(config.columns).forEach(
                         ([field, column]) => {
@@ -473,14 +502,15 @@
                         }
                       );
                     }
-                    document.getElementById("addFieldBtn").onclick = () =>
-                      addAdditionalField(columns);
+                    document
+                      .getElementById("addFieldBtn")
+                      .addEventListener("click", () =>
+                        addAdditionalField(columns)
+                      );
                   })
                   .withFailureHandler((error) => {
                     console.error("Ошибка получения колонок:", error);
-                    showError(
-                      "Не удалось загрузить заголовки для сохраненной конфигурации."
-                    );
+                    showError("Ошибка");
                     toggleFieldsSections(false);
                   })
                   .getSelectedColumns(config.headerRow);
