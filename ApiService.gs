@@ -57,10 +57,17 @@ class WBPrivateAPI {
 
 /**
  * Тестирует токен с помощью пробного API запроса
- * @param {string} token - Токен для проверки
  * @return {Object} Результат проверки
  */
-function testToken(token) {
+function testToken() {
+  const token = getTokenFromSheet();
+  if (!token) {
+    return { 
+      success: false, 
+      message: 'Токен не найден. Укажите токен в ячейке C2.' 
+    };
+  }
+
   const options = {
     method: 'get',
     headers: { 'Authorization': `Bearer ${token}` },
@@ -85,11 +92,15 @@ function testToken(token) {
 
 /**
  * Получает все товары из личного кабинета
- * @param {string} token - WB API токен
  * @param {number} walletPercent - Процент WB-кошелька
  * @return {Object[]} Массив товаров
  */
-function fetchAllProducts(token, walletPercent) {
+function fetchAllProducts(walletPercent) {
+  const token = getTokenFromSheet();
+  if (!token) {
+    throw new Error('Токен не найден. Укажите токен в ячейке C2.');
+  }
+
   const options = {
     method: 'get',
     headers: { 'Authorization': `Bearer ${token}` },
@@ -124,19 +135,20 @@ function fetchAllProducts(token, walletPercent) {
     }
   });
   
-  return processData(baseProducts, detailedProducts, walletPercent);
+  return processDataForLk(baseProducts, detailedProducts, walletPercent);
 }
 
 /**
- * Обрабатывает данные продуктов
+ * Обработка данных для режима ЛК
  * @param {Object[]} baseProducts - Базовые продукты
  * @param {Object[]} detailedProducts - Детализированные продукты
  * @param {number} walletPercent - Процент WB-кошелька
  * @return {Object[]} Обработанные данные
  */
-function processData(baseProducts, detailedProducts, walletPercent) {
+function processDataForLk(baseProducts, detailedProducts, walletPercent) {
   const walletFraction = walletPercent / 100;
   const detailsMap = new Map();
+  
   detailedProducts.forEach(product => {
     detailsMap.set(product.id, product);
   });
@@ -149,7 +161,7 @@ function processData(baseProducts, detailedProducts, walletPercent) {
     
     return {
       id: baseProduct.nmID,
-      vendorCode: baseProduct.vendorCode || 'N/A',
+      vendorCode: baseProduct?.vendorCode,
       seller_price: convertToRubles(details.priceU || 0),
       price_spp: convertToRubles(priceSpp),
       client_price: convertToRubles(clientPrice),

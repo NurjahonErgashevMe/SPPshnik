@@ -1,4 +1,14 @@
 /**
+ * Получает токен из ячейки C2 активного листа
+ * @return {string} Токен
+ */
+function getTokenFromSheet() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const cell = sheet.getRange('C2');
+  return cell.getValue().toString().trim();
+}
+
+/**
  * Преобразует индекс столбца в буквенное обозначение
  * @param {number} columnIndex - Индекс столбца (начиная с 1)
  * @return {string} Буквенное обозначение (A, B, C, ...)
@@ -36,12 +46,20 @@ function letterToColumn(letter) {
  * @return {number[]} Отфильтрованные артикулы
  */
 function extractArticles(values) {
-  return values
-    .map((row, index) => {
-      const value = row[0];
-      return extractArticle(value);
-    })
-    .filter(article => article !== null);
+  const articles = [];
+  const uniqueCheck = new Set();
+  
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i][0];
+    const article = extractArticle(value);
+    
+    if (article !== null && !uniqueCheck.has(article)) {
+      articles.push(article);
+      uniqueCheck.add(article);
+    }
+  }
+  
+  return articles;
 }
 
 /**

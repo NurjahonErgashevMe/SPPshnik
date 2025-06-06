@@ -38,9 +38,6 @@ function showConfigModalForLk() {
  */
 function processConfig(data) {
   try {
-    if (!data.token || data.token.trim() === '') {
-      return { success: false, message: 'Токен не может быть пустым.' };
-    }
     if (!data.headerRow || isNaN(data.headerRow) || data.headerRow < 1) {
       return { success: false, message: 'Укажите корректный номер строки заголовков (число больше 0).' };
     }
@@ -49,14 +46,14 @@ function processConfig(data) {
     }
 
     saveConfig(data);
-    const testResult = testToken(data.token.trim());
+    const testResult = testToken();
     if (!testResult.success) {
-      return { success: false, message: testResult.message };
+      return testResult;
     }
 
     let result;
     if (data.mode === 'parseAllLk') {
-      result = parseAllFromLk(data.columns, data.headerRow, data.token, data.walletPercent);
+      result = parseAllFromLk(data.columns, data.headerRow, data.walletPercent);
     } else {
       result = parseArticles(data.columns, data.headerRow, data.walletPercent);
     }

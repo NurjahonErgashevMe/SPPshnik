@@ -35,7 +35,7 @@ function parseArticles(columnConfig, headerRow, walletPercent) {
     };
   }
   
-  const processedData = processProducts(articles, walletPercent);
+  const processedData = processArticlesDirectly(articles, walletPercent);
   
   writeResultsToSheet(
     sheet,
@@ -56,14 +56,66 @@ function parseArticles(columnConfig, headerRow, walletPercent) {
 }
 
 /**
+ * Прямая обработка артикулов без получения базовых товаров
+ * @param {number[]} articles - Массив артикулов
+ * @param {number} walletPercent - Процент WB-кошелька
+ * @return {Object[]} Обработанные данные
+ */
+function processArticlesDirectly(articles, walletPercent) {
+  const wbApi = new WBPrivateAPI({ destination: CONFIG.DESTINATIONS.KRASNODAR });
+  
+  const uniqueArticles = [...new Set(articles)]; // Убираем дубликаты
+  const chunkSize = 100;
+  const chunks = chunkArray(uniqueArticles, chunkSize);
+  let detailedProducts = [];
+  
+  chunks.forEach((chunk, index) => {
+    try {
+      const products = wbApi.getListOfProducts(chunk);
+      detailedProducts = [...detailedProducts, ...products];
+    } catch (err) {
+      Logger.log(`Чанк ${index + 1} не обработан: ${err.message}`);
+    }
+  });
+  
+  return processDetailedProducts(detailedProducts, walletPercent);
+}
+
+/**
+ * Обработка только детализированных товаров
+ * @param {Object[]} detailedProducts - Детализированные продукты
+ * @param {number} walletPercent - Процент WB-кошелька
+ * @return {Object[]} Обработанные данные
+ */
+function processDetailedProducts(detailedProducts, walletPercent) {
+  const walletFraction = walletPercent / 100;
+  
+  return detailedProducts.map(product => {
+    const sppPercentage = calculateSPP(product.priceU, product.salePriceU);
+    const priceSpp = product.salePriceU || 0;
+    const clientPrice = calculateClientPrice(priceSpp, walletFraction);
+    
+    return {
+      id: product.id,
+      vendorCode: product.vendorCode || 'N/A',
+      seller_price: convertToRubles(product.priceU || 0),
+      price_spp: convertToRubles(priceSpp),
+      client_price: convertToRubles(clientPrice),
+      diffPrice: convertToRubles((product.priceU || 0) - (product.salePriceU || 0)),
+      spp: `${sppPercentage}%`,
+      totalQuantity: product.totalQuantity || 0
+    };
+  });
+}
+
+/**
  * Парсит все товары из личного кабинета
  * @param {Object} columnConfig - Конфигурация колонок
  * @param {number} headerRow - Номер строки заголовков
- * @param {string} token - WB API токен
  * @param {number} walletPercent - Процент WB-кошелька
  * @return {Object} Результат обработки
  */
-function parseAllFromLk(columnConfig, headerRow, token, walletPercent) {
+function parseAllFromLk(columnConfig, headerRow, walletPercent) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   
   const articleColumn = letterToColumn(columnConfig.article);
@@ -76,7 +128,7 @@ function parseAllFromLk(columnConfig, headerRow, token, walletPercent) {
   const totalQuantityColumn = columnConfig.totalQuantity ? letterToColumn(columnConfig.totalQuantity) : null;
   const vendorCodeColumn = columnConfig.vendorCode ? letterToColumn(columnConfig.vendorCode) : null;
   
-  const products = fetchAllProducts(token, walletPercent);
+  const products = fetchAllProducts(walletPercent);
   
   if (products.length === 0) {
     return {
@@ -129,67 +181,4 @@ function formatResult(articles, columnLetter, processedData) {
              `Уникальных: ${[...new Set(articles)].length}\n\n` +
              '⚠️ Данные записаны в таблицу'
   };
-}
-
-/**
- * Обрабатывает продукты через API
- * @param {number[]} articles - Массив артикулов
- * @param {number} walletPercent - Процент WB-кошелька
- * @return {Object[]} Обработанные данные продуктов
- */
-function processProducts(articles, walletPercent) {
-  const WB_API_TOKEN = JSON.parse(PropertiesService.getScriptProperties().getProperty('WB_CONFIG'))?.token;
-  if (!WB_API_TOKEN) {
-    throw new Error('WB_API_TOKEN не установлен.');
-  }
-
-  const wbApi = new WBPrivateAPI({ destination: CONFIG.DESTINATIONS.KRASNODAR });
-
-  const baseProducts = fetchBaseProducts(WB_API_TOKEN);
-  const filteredBaseProducts = baseProducts.filter(product => articles.includes(product.nmID));
-  const nmIds = filteredBaseProducts.map(p => p.nmID).filter(id => id && !isNaN(id));
-  
-  if (nmIds.length === 0) {
-    throw new Error('Не найдено соответствующих продуктов для указанных артикулов');
-  }
-  
-  const chunkSize = 100;
-  const chunks = chunkArray(nmIds, chunkSize);
-  let detailedProducts = [];
-  
-  chunks.forEach((chunk, index) => {
-    try {
-      const products = wbApi.getListOfProducts(chunk);
-      detailedProducts = [...detailedProducts, ...products];
-    } catch (err) {
-      Logger.log(`Чанк ${index + 1} не обработан: ${err.message}`);
-    }
-  });
-  
-  return processData(filteredBaseProducts, detailedProducts, walletPercent);
-}
-
-/**
- * Получает базовые продукты через API
- * @param {string} token - WB API токен
- * @return {Object[]} Массив базовых продуктов
- */
-function fetchBaseProducts(token) {
-  const options = {
-    method: 'get',
-    headers: { 'Authorization': `Bearer ${token}` },
-    muteHttpExceptions: true,
-  };
-  const url = `${CONFIG.API_ENDPOINTS.PRODUCTS_FILTER}?limit=${CONFIG.REQUEST_CONFIG.LIMIT}&offset=${CONFIG.REQUEST_CONFIG.OFFSET}`;
-  const response = UrlFetchApp.fetch(url, options);
-  const responseCode = response.getResponseCode();
-  
-  if (responseCode !== 200) {
-    throw new Error(`Ошибка запроса к API: ${responseCode}`);
-  }
-  
-  const data = JSON.parse(response.getContentText());
-  const listGoods = data?.data?.listGoods || [];
-  Logger.log('Base products count: ' + listGoods.length);
-  return listGoods;
 }

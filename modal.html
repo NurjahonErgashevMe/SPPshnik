@@ -155,8 +155,8 @@
 
       <div class="section">
         <div class="field-row">
-          <label for="tokenInput">WB API Токен:</label>
-          <input type="text" id="tokenInput" placeholder="Введите токен" />
+          <label>WB API Токен:</label>
+          <span>Токен будет взят из ячейки C2 текущего листа</span>
         </div>
         <div class="field-row">
           <label for="walletPercentInput">Процент WB-кошелька (%):</label>
@@ -314,7 +314,6 @@
         const walletPercentInput =
           document.getElementById("walletPercentInput").value;
         const data = {
-          token: document.getElementById("tokenInput").value.trim(),
           walletPercent: walletPercentInput
             ? parseFloat(walletPercentInput)
             : null,
@@ -383,11 +382,6 @@
       function submitForm() {
         hideMessages();
         const formData = gatherFormData();
-
-        if (!formData.token) {
-          showError("Токен обязателен для заполнения");
-          return;
-        }
 
         if (!formData.headerRow || formData.headerRow < 1) {
           showError(
@@ -478,7 +472,6 @@
         google.script.run
           .withSuccessHandler((config) => {
             if (config) {
-              document.getElementById("tokenInput").value = config.token || "";
               document.getElementById("walletPercentInput").value =
                 config.walletPercent || "";
               headerRowInput.value = config.headerRow || "";
