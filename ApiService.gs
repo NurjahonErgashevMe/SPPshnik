@@ -27,32 +27,53 @@ class WBPrivateAPI {
    * @returns {Object[]} Массив продуктов
    */
   getListOfProducts(productIds) {
+    const queryParams = {
+      appType: CONFIG.APPTYPES.DESKTOP,
+      curr: 'rub',
+      dest: CONFIG.DESTINATIONS.DEFAULT.id,
+      hide_dtype: 13,
+      ab_testing: false,
+      lang: 'ru',
+      nm: productIds.join(';'),
+    };
+
+    const queryString = Object.keys(queryParams)
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`)
+      .join('&');
+
+    const url = `${CONFIG.URLS.SEARCH.PRODUCTS}?${queryString}`;
+
     const options = {
       ...this.sessionConfig,
       method: 'get',
-      params: {
-        nm: productIds.join(';'),
-        appType: CONFIG.APPTYPES.DESKTOP,
-        dest: this.destination.ids[0],
-      },
     };
-    
-    const queryString = Object.keys(options.params)
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(options.params[key])}`)
-      .join('&');
-    const url = `${CONFIG.URLS.SEARCH.PRODUCTS}?${queryString}`;
-    
+
     const response = UrlFetchApp.fetch(url, options);
     const responseCode = response.getResponseCode();
-    
+
     if (responseCode !== 200) {
       throw new Error(`Ошибка запроса к API: статус ${responseCode}`);
     }
-    
+
     const data = JSON.parse(response.getContentText());
-    Logger.log('Detailed products: ' + JSON.stringify(data?.data?.products?.slice(0, 2)));
-    return data?.data?.products || [];
+    const rawProducts = data?.products || [];
+
+    return rawProducts.map(p => {
+      const size = p.sizes?.[0] || {};
+      const price = size.price || {};
+      const stocks = size.stocks || [];
+      const totalQuantity = stocks.reduce((acc, s) => acc + (s.qty || 0), 0);
+
+      return {
+        id: p.id,
+        vendorCode: p.vendorCode || 'N/A',
+        priceU: price.basic || 0,
+        salePriceU: price.product || 0,
+        totalQuantity,
+      };
+    });
   }
+
 }
 
 /**
@@ -62,9 +83,9 @@ class WBPrivateAPI {
 function testToken() {
   const token = getTokenFromSheet();
   if (!token) {
-    return { 
-      success: false, 
-      message: 'Токен не найден. Укажите токен в ячейке C2.' 
+    return {
+      success: false,
+      message: 'Токен не найден. Укажите токен в ячейке C1.'
     };
   }
 
@@ -98,7 +119,7 @@ function testToken() {
 function fetchAllProducts(walletPercent) {
   const token = getTokenFromSheet();
   if (!token) {
-    throw new Error('Токен не найден. Укажите токен в ячейке C2.');
+    throw new Error('Токен не найден. Укажите токен в ячейке C1.');
   }
 
   const options = {
@@ -107,25 +128,25 @@ function fetchAllProducts(walletPercent) {
     muteHttpExceptions: true,
   };
   const url = `${CONFIG.API_ENDPOINTS.PRODUCTS_FILTER}?limit=${CONFIG.REQUEST_CONFIG.LIMIT}&offset=${CONFIG.REQUEST_CONFIG.OFFSET}`;
-  
+
   const response = UrlFetchApp.fetch(url, options);
   const responseCode = response.getResponseCode();
-  
+
   if (responseCode !== 200) {
     throw new Error(`Ошибка запроса к API: ${responseCode}`);
   }
-  
+
   const data = JSON.parse(response.getContentText());
   const baseProducts = data?.data?.listGoods || [];
   Logger.log('Всего товаров: ' + baseProducts.length);
-  
+
   const wbApi = new WBPrivateAPI({ destination: CONFIG.DESTINATIONS.KRASNODAR });
   const nmIds = baseProducts.map(p => p.nmID).filter(id => id && !isNaN(id));
-  
+
   const chunkSize = 100;
   const chunks = chunkArray(nmIds, chunkSize);
   let detailedProducts = [];
-  
+
   chunks.forEach((chunk, index) => {
     try {
       const products = wbApi.getListOfProducts(chunk);
@@ -134,7 +155,7 @@ function fetchAllProducts(walletPercent) {
       Logger.log(`Чанк ${index + 1} не обработан: ${err.message}`);
     }
   });
-  
+
   return processDataForLk(baseProducts, detailedProducts, walletPercent);
 }
 
@@ -148,17 +169,17 @@ function fetchAllProducts(walletPercent) {
 function processDataForLk(baseProducts, detailedProducts, walletPercent) {
   const walletFraction = walletPercent / 100;
   const detailsMap = new Map();
-  
+
   detailedProducts.forEach(product => {
     detailsMap.set(product.id, product);
   });
-  
+
   return baseProducts.map(baseProduct => {
     const details = detailsMap.get(baseProduct.nmID) || {};
     const sppPercentage = calculateSPP(details.priceU, details.salePriceU);
     const priceSpp = details.salePriceU || 0;
     const clientPrice = calculateClientPrice(priceSpp, walletFraction);
-    
+
     return {
       id: baseProduct.nmID,
       vendorCode: baseProduct?.vendorCode,
